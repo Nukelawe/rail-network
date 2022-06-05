@@ -7,7 +7,7 @@ import matplotlib.transforms as transforms
 
 matplotlib.rc('font', family='serif', size=16)
 matplotlib.rc('mathtext', fontset='cm')
-#matplotlib.rc('text', usetex=True)
+matplotlib.rc('text', usetex=True)
 
 banner_colors = {
         "white":"#ffffff", "light_gray":"#9c9d96", "gray":"#464f53", "black":"#1d1c21",
@@ -57,15 +57,15 @@ class Network:
     def plot(self, filename, colors=None):
         print("Saving the network to file " + filename)
         fig = plt.figure(figsize=(19.20,10.80), dpi=1)
-        #fig.set_facecolor("black")
+        fig.set_facecolor("black")
         ax = plt.gca()
-        #ax.axis("off")
+        ax.axis("off")
         ax.set_aspect('equal', adjustable='box')
         granularity = 6
         plt.xticks(np.arange(0, 192, granularity))
         plt.yticks(np.arange(0, 108, granularity))
         plt.grid()
-        mec = "black"
+        mec = "white"
 
         # plot edges
         for edge in self.edges:
@@ -74,6 +74,8 @@ class Network:
             edgetype = edge["type"]
             xmid = .5*(nodefrom["x"] + nodeto["x"])
             zmid = .5*(nodefrom["z"] + nodeto["z"])
+            dx = nodeto["x"] - nodefrom["x"]; dx = 0
+            dz = nodeto["z"] - nodefrom["z"]; dz = 0
             kwargs = {"linestyle":"solid", "marker":None, "color":mec, "linewidth":8/6}
             if edgetype == "zx":
                 plt.plot([nodefrom["x"], nodefrom["x"], nodeto["x"]],
@@ -82,24 +84,22 @@ class Network:
                 plt.plot([nodefrom["x"], nodeto["x"],   nodeto["x"]],
                         [ nodefrom["z"], nodefrom["z"], nodeto["z"]], **kwargs)
             elif edgetype == "xx":
-                plt.plot([nodefrom["x"], xmid,          xmid,         nodeto["x"]],
+                plt.plot([nodefrom["x"], xmid-.5*dz,       xmid+.5*dz,      nodeto["x"]],
                         [ nodefrom["z"], nodefrom["z"], nodeto["z"],  nodeto["z"]],
                         **kwargs)
             elif edgetype == "zz":
                 plt.plot([nodefrom["x"], nodefrom["x"], nodeto["x"],  nodeto["x"]],
-                        [ nodefrom["z"], zmid,          zmid,         nodeto["z"]],
+                        [ nodefrom["z"], zmid-.5*dx,       zmid+.5*dx,      nodeto["z"]],
                         **kwargs)
 
         # plot nodes
-        offset = transforms.ScaledTranslation(-5.5/72., -5.5/72., plt.gcf().dpi_scale_trans)
+        offset = transforms.ScaledTranslation(-7.5/72., -7.5/72., plt.gcf().dpi_scale_trans)
         trans = plt.gca().transData
         for label,node in self.nodes.items():
             color = banner_colors[district_colors[int(self.districts[label])]]
-            plt.annotate(label, (node["x"], node["z"]), color=mec,
-                    textcoords="offset pixels", xytext=(4,4))
             if node["intersection"]:
                 plt.plot(node["x"], node["z"], linestyle="none", markersize=8,
-                        marker="D", markeredgewidth=7/6, markerfacecolor=color,
+                        marker="D", markeredgewidth=7/6, markerfacecolor="black",
                         markeredgecolor=mec)
                 if node["station"]:
                     plt.plot(node["x"], node["z"], linestyle="none", markersize=7,
@@ -111,6 +111,9 @@ class Network:
                         markeredgecolor=mec)
             else:
                 raise Exception("A node must be either intersection, station or both")
+            if node["station"]:
+                plt.annotate(label, (node["x"], node["z"]), color=mec,
+                        textcoords="offset pixels", xytext=(4,4))
 
         self.district_boundaries()
         plt.savefig(filename, bbox_inches='tight', pad_inches=.0)
