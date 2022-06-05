@@ -4,12 +4,10 @@ import json
 import sys
 import numpy as np
 import matplotlib.transforms as transforms
-#from scipy.spatial import Voronoi
-#from voronoiz import voronoi_l1
 
 matplotlib.rc('font', family='serif', size=16)
 matplotlib.rc('mathtext', fontset='cm')
-matplotlib.rc('text', usetex=True)
+#matplotlib.rc('text', usetex=True)
 
 banner_colors = {
         "white":"#ffffff", "light_gray":"#9c9d96", "gray":"#464f53", "black":"#1d1c21",
@@ -97,7 +95,7 @@ class Network:
         trans = plt.gca().transData
         for label,node in self.nodes.items():
             color = banner_colors[district_colors[int(self.districts[label])]]
-            plt.annotate(label, (node["x"], node["z"]), color="white",
+            plt.annotate(label, (node["x"], node["z"]), color=mec,
                     textcoords="offset pixels", xytext=(4,4))
             if node["intersection"]:
                 plt.plot(node["x"], node["z"], linestyle="none", markersize=8,
