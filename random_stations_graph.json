@@ -2,7 +2,7 @@
     "nodes": {
 	"3.1":  { "x":126, "z":6 , "station":true,  "intersection":false },
 	"1.0":  { "x":54 , "z":48, "station":true,  "intersection":true  },
-	"5.0":  { "x":180, "z":0 , "station":true,  "intersection":false },
+	"5.0":  { "x":180, "z":6 , "station":true,  "intersection":false },
 	"1.1":  { "x":54 , "z":54, "station":true,  "intersection":false },
 	"4.2":  { "x":144, "z":84, "station":true,  "intersection":true },
 	"3.2":  { "x":126, "z":18, "station":true,  "intersection":false },

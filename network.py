@@ -4,6 +4,7 @@ import json
 import sys
 import numpy as np
 import matplotlib.transforms as transforms
+from voronoi_chebyshev import voronoi_chebyshev
 
 matplotlib.rc('font', family='serif', size=16)
 matplotlib.rc('mathtext', fontset='cm')
@@ -20,6 +21,13 @@ district_colors = [
         "purple", "light_blue", "brown", "red",
         "orange", "blue", "green", "brown",
         "brown", "black", "gray", "light_gray"]
+
+# color of the outlines, text and lines
+mec = "white"
+# background color
+bgcolor = "black"
+# style arguments for lines
+lineargs= {"linestyle":"solid", "marker":None, "color":mec, "linewidth":8/6}
 
 class Network:
     def __init__(self, nodes, edges, plot_districts=False):
@@ -57,7 +65,7 @@ class Network:
     def plot(self, filename, colors=None):
         print("Saving the network to file " + filename)
         fig = plt.figure(figsize=(19.20,10.80), dpi=1)
-        fig.set_facecolor("black")
+        fig.set_facecolor(bgcolor)
         ax = plt.gca()
         ax.axis("off")
         ax.set_aspect('equal', adjustable='box')
@@ -65,7 +73,6 @@ class Network:
         plt.xticks(np.arange(0, 192, granularity))
         plt.yticks(np.arange(0, 108, granularity))
         plt.grid()
-        mec = "white"
 
         # plot edges
         for edge in self.edges:
@@ -76,90 +83,83 @@ class Network:
             zmid = .5*(nodefrom["z"] + nodeto["z"])
             dx = nodeto["x"] - nodefrom["x"]; dx = 0
             dz = nodeto["z"] - nodefrom["z"]; dz = 0
-            kwargs = {"linestyle":"solid", "marker":None, "color":mec, "linewidth":8/6}
             if edgetype == "zx":
                 plt.plot([nodefrom["x"], nodefrom["x"], nodeto["x"]],
-                        [ nodefrom["z"], nodeto["z"],   nodeto["z"]], **kwargs)
+                        [ nodefrom["z"], nodeto["z"],   nodeto["z"]], **lineargs)
             elif edgetype == "xz":
                 plt.plot([nodefrom["x"], nodeto["x"],   nodeto["x"]],
-                        [ nodefrom["z"], nodefrom["z"], nodeto["z"]], **kwargs)
+                        [ nodefrom["z"], nodefrom["z"], nodeto["z"]], **lineargs)
             elif edgetype == "xx":
-                plt.plot([nodefrom["x"], xmid-.5*dz,       xmid+.5*dz,      nodeto["x"]],
+                plt.plot([nodefrom["x"], xmid-.5*dz,    xmid+.5*dz,   nodeto["x"]],
                         [ nodefrom["z"], nodefrom["z"], nodeto["z"],  nodeto["z"]],
-                        **kwargs)
+                        **lineargs)
             elif edgetype == "zz":
                 plt.plot([nodefrom["x"], nodefrom["x"], nodeto["x"],  nodeto["x"]],
-                        [ nodefrom["z"], zmid-.5*dx,       zmid+.5*dx,      nodeto["z"]],
-                        **kwargs)
+                        [ nodefrom["z"], zmid-.5*dx,    zmid+.5*dx,   nodeto["z"]],
+                        **lineargs)
 
         # plot nodes
-        offset = transforms.ScaledTranslation(-7.5/72., -7.5/72., plt.gcf().dpi_scale_trans)
-        trans = plt.gca().transData
+        dpi = 72.
+        trans = ax.transData
+        trans_inv = ax.transData.inverted()
+        offset = np.array([7.5/dpi, 7.5/dpi])
         for label,node in self.nodes.items():
+            if not node["station"] and not node["intersection"]:
+                raise Exception("A node must be either intersection, station or both")
             color = banner_colors[district_colors[int(self.districts[label])]]
+            if node["station"]:
+                disp = trans.transform((node["x"],node["z"]))
+                data = trans_inv.transform(disp)
+                if node["intersection"]:
+                    dataoffset = trans_inv.transform(disp + offset)
+                    ax.plot([data[0], dataoffset[0]],
+                            [data[1], dataoffset[1]], **lineargs)
+                    data = dataoffset
+                ax.plot(data[0], data[1], linestyle="none", markersize=7,
+                        marker="o", markeredgewidth=7/6, markerfacecolor=bgcolor,
+                        markeredgecolor=mec)
+                # station labels
+                plt.annotate(label, (data[0], data[1]), color=mec,
+                        textcoords="offset pixels", xytext=(4,4),
+                        fontname="Source Code Pro", fontweight="bold")
             if node["intersection"]:
                 plt.plot(node["x"], node["z"], linestyle="none", markersize=8,
-                        marker="D", markeredgewidth=7/6, markerfacecolor="black",
+                        marker="D", markeredgewidth=7/6, markerfacecolor=bgcolor,
                         markeredgecolor=mec)
-                if node["station"]:
-                    plt.plot(node["x"], node["z"], linestyle="none", markersize=7,
-                            marker="o", markeredgewidth=7/6, markerfacecolor=color,
-                            markeredgecolor=mec, transform=trans+offset)
-            elif node["station"]:
-                plt.plot(node["x"], node["z"], linestyle="none", markersize=7,
-                        marker="o", markeredgewidth=7/6, markerfacecolor=color,
-                        markeredgecolor=mec)
-            else:
-                raise Exception("A node must be either intersection, station or both")
-            if node["station"]:
-                plt.annotate(label, (node["x"], node["z"]), color=mec,
-                        textcoords="offset pixels", xytext=(4,4))
 
         self.district_boundaries()
+        plt.xlim((0, 192))
+        plt.ylim((0, 108))
         plt.savefig(filename, bbox_inches='tight', pad_inches=.0)
 
     # computes the voronoi diagram to visualize districts
     def district_boundaries(self):
-        pass
-        #return self.voronoi_manhattan()
-        #return self.voronoi_euclidean()
-
-    def voronoi_euclidean(self):
         points = np.empty((len(self.stations), 2))
+        districts = np.empty(len(self.stations))
         labels = []
+        districts = {}
         for i,key in enumerate(self.stations.keys()):
             labels.append(key)
             points[i,0] = self.stations[key]["x"]
             points[i,1] = self.stations[key]["z"]
-        voronoi = Voronoi(points)
-        ver = voronoi.vertices
-        rp = voronoi.ridge_points
-        for i,ind in enumerate(voronoi.ridge_vertices):
-            print(labels[rp[i,0]].split(".")[0] + " = " + labels[rp[i,1]].split(".")[0])
-            if labels[rp[i,0]].split(".")[0] != labels[rp[i,1]].split(".")[0]:
-                plt.plot(ver[ind,0], ver[ind,1], linestyle="dashed", linewidth=1,
-                        marker=None, markeredgewidth=8/6, color="white")
-
-    def voronoi_manhattan(self):
-        points = np.empty((len(self.stations), 2))
-        labels = []
-        for i,key in enumerate(self.stations.keys()):
-            labels.append(key)
-            points[i,0] = self.stations[key]["x"]
-            points[i,1] = self.stations[key]["z"]
+            if self.districts[key] not in districts.keys():
+                districts[self.districts[key]] = []
+            districts[self.districts[key]].append(i)
         xmin = np.amin(points[:,0])
         xmax = np.amax(points[:,0])
         zmin = np.amin(points[:,1])
         zmax = np.amax(points[:,1])
         xwidth = xmax - xmin
         zwidth = zmax - zmin
-        r = .1
-        cells = voronoi_l1(points,
+        r = 2
+        cells = voronoi_chebyshev(points, districts,
                 xmin-r*xwidth, xmax+r*xwidth,
                 zmin-r*zwidth, zmax+r*zwidth)
-        for cell in cells:
-            plt.plot(cell[:,0], cell[:,1], linestyle="dashed", linewidth=1,
-                    marker=None, markeredgewidth=8/6, color="white")
+        for district in cells:
+            color = banner_colors[district_colors[int(district)]]
+            patch = plt.Polygon(cells[district], linestyle=None, facecolor=color,
+                    alpha=.25, edgecolor=bgcolor)
+            plt.gca().add_patch(patch)
 
 def intersection_key(x,z):
     return str(x)+","+str(z)
