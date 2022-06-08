@@ -1,14 +1,9 @@
+import numpy as np
+from voronoi_chebyshev import voronoi_chebyshev
+import matplotlib.transforms as transforms
 import matplotlib.pyplot as plt
 import matplotlib
 import json
-import sys
-import numpy as np
-import matplotlib.transforms as transforms
-from voronoi_chebyshev import voronoi_chebyshev
-
-matplotlib.rc('font', family='serif', size=16)
-matplotlib.rc('mathtext', fontset='cm')
-matplotlib.rc('text', usetex=False)
 
 banner_colors = {
         "white":"#ffffff", "light_gray":"#9c9d96", "gray":"#464f53", "black":"#1d1c21",
@@ -21,40 +16,81 @@ district_colors = [
         "purple", "light_blue", "brown", "red",
         "orange", "blue", "green", "brown",
         "brown", "black", "gray", "light_gray"]
-
-# network style parameters
-mec = "white" # color of lines
-line_width = 7/6 # width of lines
+# style parameters
+linecolor = "white" # color of lines
 bgcolor = "black" # background color
-intersection_size = 8 # size of intersections
-station_size = 7 # size of stations
+debugcolor = "#555555"
+
+line_width = 10/6 # width of lines
+stationsize = 10 # size of stations
+intersectionsize = 10 # size of intersections
+fontsize_out = 20 # label font size in zoomed out scenes
+fontsize_in = 60 # label font size in zoomed in scenes
+label_offset = np.array([6,6])
+
 # style arguments for lines
-lineargs= {"linestyle":"solid", "marker":None, "color":mec, "linewidth":line_width}
+lineargs= {
+        "linestyle":"solid",
+        "marker":None,
+        "color":linecolor,
+        "linewidth":line_width
+}; labelargs = {
+        "textcoords":"offset points",
+        "xytext":label_offset,
+        "fontname":"sans serif",
+        "fontweight":"regular",
+        "fontsize":fontsize_out
+}; nodeargs = {
+        "markeredgewidth":line_width,
+        "markersize":stationsize,
+        "markerfacecolor":bgcolor,
+        "markeredgecolor":linecolor,
+        "linestyle":None
+}
+
+# parse the node label for its district number
+def _get_district(label):
+    addr = label.split(".")
+    if len(addr) == 2 and addr[0].isnumeric():
+        return addr[0]
+    return 0
 
 class Network:
     def __init__(self, nodes, edges):
         self.nodes = nodes
         self.edges = edges
-        self.stations = {}
-        districts = {}
-        for label in nodes.keys():
-            if nodes[label]["station"]:
-                self.stations[label] = self.nodes[label]
-            # read districts from station labels
-            addr = label.split(".")
-            if len(addr) == 2 and addr[0].isnumeric():
-                districts[label] = addr[0]
-            else:
-                districts[label] = 15
-        self.districts = districts
+        self.districts = {} # district number -> list of node indices
+        # numpy array of node coords
+        self.points = np.empty(len(self.nodes), dtype=[("x",int), ("z",int)])
+        labels = np.array(list(self.nodes.keys()))
+        station_inds = [] # indices of station nodes
+        for i,label in enumerate(labels):
+            node = self.nodes[label]
+            if node["station"]:
+                station_inds.append(i)
+            self.points[i] = (node["x"], node["z"])
+            addr = _get_district(label)
+            if addr not in self.districts.keys():
+                self.districts[addr] = []
+            self.districts[addr].append(i)
 
-        # dictionary that holds the number of connections to each node
-        self.connections = {}
+        self.flatlabels = {} # label -> flattened station address
+        station_points = self.points[station_inds]
+        station_labels = labels[station_inds]
+        station_points["z"] *= -1
+        inds = np.argsort(station_points, order=("x", "z"))
+        station_labels = station_labels[inds]
+        for i,label in enumerate(station_labels):
+            self.flatlabels[label] = i
+
+        self.connections = {} # label -> number of incident edges to the node
         for node in self.nodes:
             self.connections[node] = 0
         for edge in self.edges:
             self.connections[edge["from"]] += 1
             self.connections[edge["to"]] += 1
+
+        # check that the network is valid
         for label,node in self.nodes.items():
             if self.connections[label] > 1 and not node["intersection"]:
                 raise Exception("Only intersections may have many incident edges. \
@@ -66,48 +102,88 @@ class Network:
             if not node["station"] and not node["intersection"]:
                 raise Exception("A node must be either an intersection, station or both")
 
-    def plot(self, fig, debug=False):
-        artists = []
+    # computes the voronoi diagram to visualize districts
+    def district_boundaries(self):
+        xmin = np.amin(self.points["x"])
+        xmax = np.amax(self.points["x"])
+        zmin = np.amin(self.points["z"])
+        zmax = np.amax(self.points["z"])
+        xwidth = xmax - xmin
+        zwidth = zmax - zmin
+        r = 2
+        return voronoi_chebyshev(self.points, self.districts,
+                xmin-r*xwidth, xmax+r*xwidth,
+                zmin-r*zwidth, zmax+r*zwidth)
+
+    ##
+    ## Network plotting and styling
+    ##
+    def plot(self, fig=None, debug=False):
+        if fig is None:
+            fig = plt.figure(figsize=(19.20,10.87), dpi=129.05)
+        fig.subplots_adjust(left=0, bottom=0, right=1, top=1, wspace=None, hspace=None)
+        self.debug = debug
         ax = fig.gca()
+        ax.set_xlim((0, 192))
+        ax.set_ylim((0, 108))
         if debug:
             granularity = 6
             ax.set_xticks(np.arange(0, 192, granularity))
             ax.set_yticks(np.arange(0, 108, granularity))
-            ax.grid()
+            ax.grid(color=debugcolor, linewidth=.5)
+            ax.set_facecolor(bgcolor)
+            ax.tick_params(axis="both", colors=debugcolor)
         else:
             ax.axis("off")
         fig.set_facecolor(bgcolor)
+        ax.set_aspect('equal', adjustable='box')
+        return fig, ax
 
-        # plot edges
+    def plot_edges(self, fig):
+        ax = fig.gca()
+        edges = []
         for edge in self.edges:
             nodefrom = self.nodes[edge["from"]]
             nodeto = self.nodes[edge["to"]]
             edgetype = edge["type"]
             xmid = .5*(nodefrom["x"] + nodeto["x"])
             zmid = .5*(nodefrom["z"] + nodeto["z"])
-            dx = nodeto["x"] - nodefrom["x"]; dx = 0
-            dz = nodeto["z"] - nodefrom["z"]; dz = 0
+            dx = np.abs(nodeto["x"] - nodefrom["x"])#; dx = 0
+            dz = np.abs(nodeto["z"] - nodefrom["z"])#; dz = 0
             if edgetype == "zx":
-                ax.plot([nodefrom["x"], nodefrom["x"], nodeto["x"]],
-                        [ nodefrom["z"], nodeto["z"],   nodeto["z"]], **lineargs)
+                a = ax.plot([nodefrom["x"], nodefrom["x"], nodeto["x"]],
+                        [nodefrom["z"], nodeto["z"],   nodeto["z"]],
+                        **lineargs)
             elif edgetype == "xz":
-                ax.plot([nodefrom["x"], nodeto["x"],   nodeto["x"]],
-                        [ nodefrom["z"], nodefrom["z"], nodeto["z"]], **lineargs)
+                a = ax.plot([nodefrom["x"], nodeto["x"],   nodeto["x"]],
+                        [nodefrom["z"], nodefrom["z"], nodeto["z"]],
+                        **lineargs)
             elif edgetype == "xx":
-                ax.plot([nodefrom["x"], xmid-.5*dz,    xmid+.5*dz,   nodeto["x"]],
-                        [ nodefrom["z"], nodefrom["z"], nodeto["z"],  nodeto["z"]],
+                a = ax.plot([nodefrom["x"], xmid-.5*dz,    xmid+.5*dz,  nodeto["x"]],
+                        [nodefrom["z"], nodefrom["z"], nodeto["z"], nodeto["z"]],
                         **lineargs)
             elif edgetype == "zz":
-                ax.plot([nodefrom["x"], nodefrom["x"], nodeto["x"],  nodeto["x"]],
-                        [ nodefrom["z"], zmid-.5*dx,    zmid+.5*dx,   nodeto["z"]],
+                a = ax.plot([nodefrom["x"], nodefrom["x"], nodeto["x"], nodeto["x"]],
+                        [nodefrom["z"], zmid-.5*dx,    zmid+.5*dx,  nodeto["z"]],
                         **lineargs)
+            if a is not None:
+                edges.append(a[0])
+        return edges
 
-        # plot nodes
+    def plot_nodes(self, fig, districts=True, annotate=True):
+        stations = []
+        intersections = []
+        labels = []
+        ax = fig.gca()
         trans = ax.transData
         trans_inv = ax.transData.inverted()
-        offset = np.array([7.5/72., 7.5/72.])
+        offset = np.array([-7.5/72.*fig.dpi, -7.5/72.*fig.dpi])
+
+        # marker size
+        disp1 = trans.transform((.5,.5))
+        disp0 = trans.transform((0,0))
+        markersize = (disp1-disp0)[0]
         for label,node in self.nodes.items():
-            color = banner_colors[district_colors[int(self.districts[label])]]
             if node["station"]:
                 disp = trans.transform((node["x"],node["z"]))
                 data = trans_inv.transform(disp)
@@ -116,73 +192,52 @@ class Network:
                     ax.plot([data[0], dataoffset[0]],
                             [data[1], dataoffset[1]], **lineargs)
                     data = dataoffset
-                ax.plot(data[0], data[1], linestyle="none", markersize=station_size,
-                        marker="o", markeredgewidth=line_width, markerfacecolor=bgcolor,
-                        markeredgecolor=mec)
-                # station labels
-                ax.annotate(label, (data[0], data[1]), color=mec,
-                        textcoords="offset pixels", xytext=(4,4),
-                        fontname="sans serif", fontweight="regular", fontsize=16)
-            if node["intersection"]:
-                ax.plot(node["x"], node["z"], linestyle="none",
-                        markersize=intersection_size, marker="D",
-                        markeredgewidth=line_width, markerfacecolor=bgcolor,
-                        markeredgecolor=mec)
+                a = ax.plot(data[0], data[1], marker="o", **nodeargs)
+                stations.append(a[0])
+                if not districts: label = self.flatlabels[label]
+                if annotate:
+                    a = ax.annotate(label, (node["x"], node["z"]), color=linecolor,
+                            **labelargs)
+                    labels.append(a)
 
-        # color districts
+            if node["intersection"]:
+                a = ax.plot(node["x"], node["z"], marker="D", **nodeargs)
+                intersections.append(a[0])
+                if self.debug and annotate:
+                    a = ax.annotate(label, (node["x"], node["z"]),
+                            color=debugcolor, **labelargs)
+                    labels.append(a)
+        if districts: self._plot_districts(ax)
+        return stations, intersections, labels
+
+    def _plot_districts(self, ax):
+        # color the map
         cells = self.district_boundaries()
         for district in cells:
             color = banner_colors[district_colors[int(district)]]
             patch = plt.Polygon(cells[district], linestyle=None, facecolor=color,
-                    alpha=.25, edgecolor=bgcolor)
+                    alpha=.25, edgecolor="None")
             ax.add_patch(patch)
-        return artists
-
-    # computes the voronoi diagram to visualize districts
-    def district_boundaries(self):
-        points = np.empty((len(self.stations), 2))
-        districts = np.empty(len(self.stations))
-        labels = []
-        districts = {}
-        for i,key in enumerate(self.stations.keys()):
-            labels.append(key)
-            points[i,0] = self.stations[key]["x"]
-            points[i,1] = self.stations[key]["z"]
-            if self.districts[key] not in districts.keys():
-                districts[self.districts[key]] = []
-            districts[self.districts[key]].append(i)
-        xmin = np.amin(points[:,0])
-        xmax = np.amax(points[:,0])
-        zmin = np.amin(points[:,1])
-        zmax = np.amax(points[:,1])
-        xwidth = xmax - xmin
-        zwidth = zmax - zmin
-        r = 2
-        cells = voronoi_chebyshev(points, districts,
-                xmin-r*xwidth, xmax+r*xwidth,
-                zmin-r*zwidth, zmax+r*zwidth)
-        return cells
 
 if __name__ =="__main__":
-    if len(sys.argv) != 3:
-        raise Exception("Incorrect number of arguments,\
-                run as 'python network.py <inputfilename> <outputfilename>'")
-    inputfile = sys.argv[1]
-    outputfile = sys.argv[2]
+    inputfile = "random_stations_graph.json"
     print("Reading network from file " + inputfile)
-
     with open(inputfile, "r") as file:
         data = json.loads(file.read())
         nodes = data["nodes"]
         edges = data["edges"]
+    nw = Network(nodes, edges)
 
-    network = Network(nodes, edges)
-    dpi = 1
-    fig = plt.figure(figsize=(1920/dpi,1080/dpi), dpi=dpi)
-    ax = fig.gca()
-    ax.set_xlim((0, 192))
-    ax.set_ylim((0, 108))
-    print("Saving the network to file " + outputfile)
-    network.plot(fig)
-    fig.savefig(outputfile, bbox_inches='tight', pad_inches=.0, dpi=dpi, backend="AGG",
-            format="png")
+    def save_figure(filename, fig, debug):
+        print("Saving the network to file " + filename)
+        nw.plot(fig=fig, debug=debug)
+        nw.plot_edges(fig)
+        nw.plot_nodes(fig, districts=True)
+        fig.savefig(filename, bbox_inches='tight', pad_inches=.0)
+
+    fig = plt.figure(figsize=(19.20,10.87), dpi=129.05)
+    save_figure("network.png",       fig, debug=False)
+    fig = plt.figure(figsize=(19.20,10.80), dpi=1)
+    save_figure("network.pdf",       fig, debug=False)
+    fig = plt.figure(figsize=(19.20,10.80), dpi=1)
+    save_figure("network_debug.pdf", fig, debug=True)
