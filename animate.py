@@ -7,6 +7,7 @@ from matplotlib.colors import to_hex
 from matplotlib.patches import Circle
 from network import Network
 from scipy.ndimage import rotate
+from scipy.special import betainc, beta
 import matplotlib
 from PIL import Image
 import itertools
@@ -26,20 +27,22 @@ intersectionsize = 10 # size of intersections
 linewidth = stationsize / 6 # width of lines
 label_offset = np.array([6,6])
 cartsize = .03 * stationsize
-z0 = .05 # maximum zoom level
+zi = .05 # zoomed in level
+zo = 1 # zoomed out level
 blink_color = np.array([.5,.5,1.])
 black = np.array([0.,0.,0.])
 r = 10 # image rescale factor
 
 # data limits for the zoomed out view
-zoom_far = np.array([[0, 0], [192, 108]])
-def zoom_limits(limits, focus, s):
-    z = 1 + (z0 - 1) * s
-    A = z * np.array([
-        [1-.5*s,  -.5*s],
-        [  .5*s, 1-.5*s]
-    ])
-    return A @ limits + (1-(1-s)*z) * focus, z
+def zoom_limits(s, focus=None):
+    zoom_out = np.array([[0, 0], [192, 108]])
+    if focus is None: focus = np.mean(zoom_out, axis=0)
+    p = 5 # degree of interpolation curve
+    s = betainc(p+1,p+1,s) / betainc(p+1,p+1,1)
+    z = zo * (1-s) + zi * s
+    A = zi * np.array([[.5,-.5], [.5, .5]])
+    zoom_in = zi * np.array([[.5,-.5], [.5, .5]]) @ zoom_out + focus
+    return zoom_in * s + zoom_out * (1-s), z
 
 fps = 60 # frames per second
 movement_speed = 3 # number of seconds to move from left to right accross the screen
@@ -48,11 +51,11 @@ zoom_speed = .5 # number of seconds to zoom
 
 def save_anim(filename, anim):
     print("Saving animation to file " + filename)
-    anim.save(filename, fps=fps, dpi=50)
+    anim.save(filename, fps=fps, dpi=100)
 
 # set the zoom level of the given axis object
-def set_zoom(ax, level, artists, center=zoom_far[1,:]/2):
-    limits, z = zoom_limits(zoom_far, center, level)
+def set_zoom(ax, level, artists, focus=None):
+    limits, z = zoom_limits(level, focus=focus)
     ax.set_xlim(limits[:,0])
     ax.set_ylim(limits[:,1])
     for marker in artists["stations"]:
@@ -110,7 +113,7 @@ def zoom_animation(filename, focus, backwards=False):
 
     def update(frame):
         if not backwards: frame = 1 - frame
-        set_zoom(ax, 1-frame, artists, focus)
+        set_zoom(ax, 1-frame, artists, focus=focus)
         return list(itertools.chain(*artists.values()))
 
     frames = np.linspace(0, 1, int(fps * zoom_speed))
@@ -146,7 +149,7 @@ def rotate_animation(filename, focus, angle0, angle1, addr, districts=False):
     if isinstance(angle1, str): angle1 = directions[angle1]
 
     fig,ax,nw_artists = plot_network(districts, annotate=True)
-    set_zoom(ax, 1, nw_artists, center=pos)
+    set_zoom(ax, 1, nw_artists, focus=pos)
     cart,label,outline = plot_cart(ax, pos, angle1, addr)
     box = cart.get_children()[0]
 
@@ -174,7 +177,7 @@ def move_cart(filename, p0, dirn, addr, backwards=False, districts=False, center
     # plot the network
     fig,ax,nw_artists = plot_network(districts, annotate=True)
     # zoom onto center
-    set_zoom(ax, 1, nw_artists, center=center)
+    set_zoom(ax, 1, nw_artists, focus=center)
 
     angle = directions[dirn]
     # get size of the currently visible section of the map
