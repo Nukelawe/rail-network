@@ -38,9 +38,9 @@ zo = 1 # zoomed out level
 blink_color = np.array([.5,.5,1.])
 black = np.array([0.,0.,0.])
 r = 10 # image rescale factor
-#p = 4 # degree of interpolation curve
-pin = 2.0
-pout = 2.0
+pin = 2.0 # pin is the ease in factor
+pout = 2.0 # pout is the ease out factor
+num_blinks = 3 # number of times stations or intersections blink
 
 # data limits for the zoomed out view
 def zoom_limits(s, focus=None):
@@ -161,8 +161,8 @@ def plot_routing_table(ax):
             pad=.0, box_alignment=(0,1), alpha=.5)
     return ax.add_artist(table)
 
-num_blinks = 2
 frames = np.linspace(0, num_blinks*np.pi, fps * num_blinks)
+
 def blink_animation(filename, annotate=True):
     fig,ax,artists = plot_network(districts=False, annotate=annotate)
     set_zoom(ax, 0, artists)
@@ -301,14 +301,14 @@ if __name__ =="__main__":
     blink_animation("blink_intersections.mp4", annotate=True)
 
     addr = "1.4"
-    #add_cart_label("station1.mp4", "1.3", "south", addr)
-    #move_cart("station2.mp4", "1.3", "south", addr)
-    #move_cart("intersection1.mp4", "1.0i", "north", addr, backwards=True, routing_table=True)
-    #move_cart("intersection3.mp4", "1.0i", "east", addr)
+    add_cart_label("station1.mp4", "1.3", "south", addr)
+    move_cart("station2.mp4", "1.3", "south", addr)
+    move_cart("intersection1.mp4", "1.0i", "north", addr, backwards=True, routing_table=True)
+    move_cart("intersection3.mp4", "1.0i", "east", addr)
 
     zoom_animation("zoom1.mp4", "1.3")
     zoom_animation("zoom2.mp4", "1.3", backwards=True)
     zoom_animation("zoom3.mp4", "1.0i")
     zoom_animation("zoom4.mp4", "1.0i", backwards=True)
 
-    #rotate_animation("rotate1.mp4", "1.0i", "south", "east", addr)
+    rotate_animation("rotate1.mp4", "1.0i", "south", "east", addr)
