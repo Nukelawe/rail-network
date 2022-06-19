@@ -1,3 +1,9 @@
+# This is the main file to generate the rail network animations
+#
+# Params:
+# zoom_speed - change this number to alter the zoom in and out speed
+#
+
 import numpy as np
 import json
 import matplotlib.pyplot as plt
