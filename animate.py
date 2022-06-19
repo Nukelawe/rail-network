@@ -97,7 +97,7 @@ cart_img_large = cart_img.resize((width*r,height*r), resample=Image.Resampling.B
 cart_npimg_large = np.array(cart_img_large)
 def plot_cart(ax, pos, angle, addr):
     # cart image
-    img = OffsetImage(rotate(cart_npimg_large, angle-90), zoom=cartsize*(.03/zi))
+    img = OffsetImage(rotate(cart_npimg_large, angle-90), zoom=cartsize*(.05/zi))
     box = AnnotationBbox(img, pos, frameon=False)
     # destination address annotation
     label = AnnotationBbox(
@@ -147,7 +147,6 @@ def plot_routing_table(ax):
             \\vdots & \\vdots \\\\ \
             \\hline \
             \\end{tabular}"
-    #table_text = "$\\begin{$"
     textArea = TextArea(table_text, multilinebaseline=True,
             textprops={"color":"white", "fontname":"sans",
                 "fontweight":"regular", "fontsize":fontsize_out,
