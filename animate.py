@@ -41,6 +41,7 @@ r = 10 # image rescale factor
 pin = 2.0 # pin is the ease in factor
 pout = 2.0 # pout is the ease out factor
 num_blinks = 3 # number of times stations or intersections blink
+blink_speed = .5 # time to blink once in seconds
 
 # data limits for the zoomed out view
 def zoom_limits(s, focus=None):
@@ -161,8 +162,6 @@ def plot_routing_table(ax):
             pad=.0, box_alignment=(0,1), alpha=.5)
     return ax.add_artist(table)
 
-frames = np.linspace(0, num_blinks*np.pi, fps * num_blinks)
-
 def blink_animation(filename, annotate=True):
     fig,ax,artists = plot_network(districts=False, annotate=annotate)
     set_zoom(ax, 0, artists)
@@ -178,6 +177,7 @@ def blink_animation(filename, annotate=True):
             marker.set_zorder(100)
         return markers
 
+    frames = np.linspace(0, num_blinks*np.pi, blink_speed * fps * num_blinks)
     anim = FuncAnimation(fig, update, blit=True, frames=frames)
     save_anim(filename, anim)
 
