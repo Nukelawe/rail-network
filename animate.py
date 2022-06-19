@@ -38,9 +38,9 @@ zo = 1 # zoomed out level
 blink_color = np.array([.5,.5,1.])
 black = np.array([0.,0.,0.])
 r = 10 # image rescale factor
-#p = 4 # degree of interpolation curve
 pin = 2.0
 pout = 2.0
+blink_speed = .5 # time to blink once in seconds
 
 # data limits for the zoomed out view
 def zoom_limits(s, focus=None):
@@ -162,7 +162,6 @@ def plot_routing_table(ax):
     return ax.add_artist(table)
 
 num_blinks = 2
-frames = np.linspace(0, num_blinks*np.pi, fps * num_blinks)
 def blink_animation(filename, annotate=True):
     fig,ax,artists = plot_network(districts=False, annotate=annotate)
     set_zoom(ax, 0, artists)
@@ -178,6 +177,7 @@ def blink_animation(filename, annotate=True):
             marker.set_zorder(100)
         return markers
 
+    frames = np.linspace(0, num_blinks*np.pi, blink_speed * fps * num_blinks)
     anim = FuncAnimation(fig, update, blit=True, frames=frames)
     save_anim(filename, anim)
 
