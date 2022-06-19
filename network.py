@@ -228,11 +228,11 @@ if __name__ =="__main__":
         edges = data["edges"]
     nw = Network(nodes, edges)
 
-    def save_figure(filename, fig, debug):
+    def save_figure(filename, fig, debug=False, districts=True):
         print("Saving the network to file " + filename)
         nw.plot(fig=fig, debug=debug)
         nw.plot_edges(fig)
-        nw.plot_nodes(fig, districts=True)
+        nw.plot_nodes(fig, districts=districts)
         fig.savefig(filename, bbox_inches='tight', pad_inches=.0)
 
     fig = plt.figure(figsize=(19.20,10.87), dpi=129.05)
@@ -241,3 +241,5 @@ if __name__ =="__main__":
     save_figure("network.pdf",       fig, debug=False)
     fig = plt.figure(figsize=(19.20,10.80), dpi=1)
     save_figure("network_debug.pdf", fig, debug=True)
+    fig = plt.figure(figsize=(19.20,10.80), dpi=1)
+    save_figure("network_flattened.pdf", fig, debug=False, districts=False)

@@ -33,7 +33,7 @@ intersectionsize = 10 # size of intersections
 linewidth = stationsize / 6 # width of lines
 label_offset = np.array([6,6])
 cartsize = .03 * stationsize
-zi = .05 # zoomed in level
+zi = .07 # zoomed in level
 zo = 1 # zoomed out level
 blink_color = np.array([.5,.5,1.])
 black = np.array([0.,0.,0.])
@@ -78,7 +78,7 @@ def set_zoom(ax, level, artists, focus=None):
     return z
 
 def plot_network(districts=True, annotate=True):
-    fig, ax = network.plot()
+    fig, ax = network.plot(fig=plt.figure(figsize=(19.2,10.8)))
     lines = network.plot_edges(fig)
     stations,intersections,labels = network.plot_nodes(fig,
             districts=districts, annotate=annotate)
@@ -95,7 +95,7 @@ cart_img_large = cart_img.resize((width*r,height*r), resample=Image.Resampling.B
 cart_npimg_large = np.array(cart_img_large)
 def plot_cart(ax, pos, angle, addr):
     # cart image
-    img = OffsetImage(rotate(cart_npimg_large, angle-90), zoom=cartsize)
+    img = OffsetImage(rotate(cart_npimg_large, angle-90), zoom=cartsize*(.03/zi))
     box = AnnotationBbox(img, pos, frameon=False)
     # destination address annotation
     label = AnnotationBbox(
@@ -125,6 +125,40 @@ def zoom_animation(filename, focus, backwards=False):
     frames = np.linspace(0, 1, int(fps * zoom_speed))
     anim = FuncAnimation(fig, update, frames=frames, blit=True)
     save_anim(filename, anim)
+
+def plot_routing_table(ax):
+    # destination address annotation
+    table_text = "\\renewcommand{\\arraystretch}{.9} \
+            \\begin{tabular}{|c|c|} \
+            \\hline \
+            address & direction\\\\ \
+            \\hline \
+            0 & west \\\\ \
+            1 & south \\\\ \
+            2 & west \\\\ \
+            3 & north \\\\ \
+            4 & south \\\\ \
+            5 & east \\\\ \
+            6 & east \\\\ \
+            7 & south \\\\ \
+            8 & east \\\\ \
+            \\vdots & \\vdots \\\\ \
+            \\hline \
+            \\end{tabular}"
+    #table_text = "$\\begin{$"
+    textArea = TextArea(table_text, multilinebaseline=True,
+            textprops={"color":"white", "fontname":"sans",
+                "fontweight":"regular", "fontsize":fontsize_out,
+                "horizontalalignment":"left", "verticalalignment":"center",
+                "fontstretch":1000, "usetex":True, "backgroundcolor":"black"})
+    textArea._text.set_bbox(dict(facecolor='black', alpha=0.5, edgecolor="none"))
+    xlim = ax.get_xlim(); ylim = ax.get_ylim()
+    pad = .1 * (ylim[1] - ylim[0])
+    pos = [xlim[0]+pad, ylim[1]-pad]
+    table = AnnotationBbox(
+            textArea, pos, frameon=False, zorder=101,
+            pad=.0, box_alignment=(0,1), alpha=.5)
+    return ax.add_artist(table)
 
 num_blinks = 2
 frames = np.linspace(0, num_blinks*np.pi, fps * num_blinks)
@@ -172,7 +206,39 @@ def rotate_animation(filename, focus, angle0, angle1, addr, districts=False):
     anim = FuncAnimation(fig, update, blit=True, frames=frames)
     save_anim(filename, anim)
 
-def move_cart(filename, p0, dirn, addr, backwards=False, districts=False, center=None):
+def add_cart_label(filename, p0, dirn, addr, districts=False, center=None):
+    intersection = nodes[addr]["intersection"]
+    if not districts: addr = network.flatlabels[addr]
+    if isinstance(p0, str):
+        node = nodes[p0]
+        p0 = np.array([node["x"], node["z"]])
+    if center is None: center = p0
+
+    # plot the network
+    fig,ax,nw_artists = plot_network(districts, annotate=True)
+    # zoom onto center
+    set_zoom(ax, 1, nw_artists, focus=center)
+
+    angle = directions[dirn]
+    pmid = np.array([np.mean(ax.get_xlim()), np.mean(ax.get_ylim())])
+
+    cart,label,outline = plot_cart(ax, pmid, angle, addr)
+    def update(frame):
+        if frame == 1:
+            label.set_visible(True)
+            outline.set_visible(True)
+        else:
+            label.set_visible(False)
+            outline.set_visible(False)
+        return label,outline
+
+    init = lambda:list(itertools.chain(*nw_artists.values()))
+
+    anim = FuncAnimation(fig, update, init_func=init, blit=True, frames=[0,1])
+    save_anim(filename, anim)
+
+def move_cart(filename, p0, dirn, addr, backwards=False, districts=False, center=None,
+        routing_table=False):
     intersection = nodes[addr]["intersection"]
     if not districts: addr = network.flatlabels[addr]
     if isinstance(p0, str):
@@ -197,27 +263,36 @@ def move_cart(filename, p0, dirn, addr, backwards=False, districts=False, center
         angle *= -1
     pmid = np.array([np.mean(xlim), np.mean(ylim)])
 
+    table = plot_routing_table(ax)
     cart,label,outline = plot_cart(ax, pmid, angle, addr)
     def update(frame):
-        label.set_visible(True)
-        outline.set_visible(True)
-        if frame < 0:
-            if not intersection:
-                label.set_visible(False)
-                outline.set_visible(False)
-            cart.xyann = p0
+        if frame < .05 or not routing_table:
+            table.set_visible(False)
         else:
-            cart.xyann = p1 * frame + p0 * (1-frame)
+            table.set_visible(True)
+        cart.xyann = p1 * frame + p0 * (1-frame)
         label.xyann = cart.xyann
         outline.center = cart.xyann
-        return cart,label,outline
+        return cart,label,outline,table
 
     init = lambda:list(itertools.chain(*nw_artists.values()))
 
     numframes = fps * movement_speed * np.amax(np.abs(p0-p1)) / size[0]
     numframes = np.ceil(numframes).astype(int)
-    frames = np.concatenate(([-1], np.linspace(0, 1, numframes)))
+    frames = np.linspace(0, 1, numframes)
     anim = FuncAnimation(fig, update, init_func=init, blit=True, frames=frames)
+    save_anim(filename, anim)
+
+def routing_animation(filename, focus, dirn, addr, districts=False):
+    fig,ax,nw_artists = plot_network(districts, annotate=True)
+    if isinstance(focus, str):
+        node = nodes[focus]
+        focus = np.array([node["x"], node["z"]])
+    set_zoom(ax, 1, nw_artists, focus=focus)
+    table = plot_routing_table(ax)
+    def update(frame):
+        return [table]
+    anim = FuncAnimation(fig, update, blit=True, frames=[0])
     save_anim(filename, anim)
 
 if __name__ =="__main__":
@@ -225,8 +300,9 @@ if __name__ =="__main__":
     blink_animation("blink_intersections.mp4", annotate=True)
 
     addr = "1.4"
-    move_cart("station1.mp4", "1.3", "south", addr)
-    move_cart("intersection1.mp4", "1.0i", "north", addr, backwards=True)
+    add_cart_label("station1.mp4", "1.3", "south", addr)
+    move_cart("station2.mp4", "1.3", "south", addr)
+    move_cart("intersection1.mp4", "1.0i", "north", addr, backwards=True, routing_table=True)
     move_cart("intersection3.mp4", "1.0i", "east", addr)
 
     zoom_animation("zoom1.mp4", "1.3")
