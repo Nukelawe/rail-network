@@ -32,8 +32,8 @@ stationsize = 10 # size of stations
 intersectionsize = 10 # size of intersections
 linewidth = stationsize / 6 # width of lines
 label_offset = np.array([6,6])
-cartsize = .03 * stationsize
-zi = .07 # zoomed in level
+cartsize = stationsize
+zi = 14 # zoomed in level
 zo = 1 # zoomed out level
 blink_color = np.array([.5,.5,1.])
 black = np.array([0.,0.,0.])
@@ -48,10 +48,9 @@ def zoom_limits(s, focus=None):
     zoom_out = np.array([[0, 0], [192, 108]])
     if focus is None: focus = np.mean(zoom_out, axis=0)
     s = betainc(pin,pout,s) / betainc(pin,pout,1)
-    z = zo * (1-s) + zi * s
-    A = zi * np.array([[.5,-.5], [.5, .5]])
-    zoom_in = zi * np.array([[.5,-.5], [.5, .5]]) @ zoom_out + focus
-    return zoom_in * s + zoom_out * (1-s), z
+    z = (1-s) / zo + s / zi
+    zoom_in = np.array([[.5,-.5], [.5, .5]]) / zi @ zoom_out + focus
+    return zoom_in * s + zoom_out * (1-s), 1 / z
 
 fps = 60 # frames per second
 movement_speed = 3 # number of seconds to move from left to right accross the screen
@@ -68,16 +67,30 @@ def set_zoom(ax, level, artists, focus=None):
     ax.set_xlim(limits[:,0])
     ax.set_ylim(limits[:,1])
     for marker in artists["stations"]:
-        marker.set_markersize(stationsize / z)
+        marker.set_markersize(stationsize * z)
     for marker in artists["intersections"]:
-        marker.set_markersize(intersectionsize / z)
+        marker.set_markersize(intersectionsize * z)
     for marker in artists["stations"] + artists["intersections"]:
-        marker.set_markeredgewidth(linewidth / z)
+        marker.set_markeredgewidth(linewidth * z)
     for line in artists["edges"]:
-        line.set_linewidth(linewidth / z)
+        line.set_linewidth(linewidth * z)
+
+    # bezier curve font size interpolation
+    z0 = zo; z1 = fontsize_in / fontsize_out; z2 = zi
+    f0 = fontsize_out; f1 = fontsize_in; f2 = fontsize_in;
+    a = z0 - 2 * z1 + z2
+    b = -2 * (z0 - z1)
+    c = z0 - z
+    t = .5 / a * (-b + np.sqrt(b**2 - 4 * a * c))
+    fontsize = (1-t) * ((1-t) * f0 + t * f1) + t * ((1-t) * f1 + t * f2)
     for label in artists["nodelabels"]:
+<<<<<<< HEAD
         label.set_fontsize(fontsize_out)
         label.xyann = label_offset / z
+=======
+        label.set_fontsize(fontsize)
+        label.xyann = label_offset * z
+>>>>>>> c7ecd0fa92b7a2bf38332e20a7d81571fe645ce6
     return z
 
 def plot_network(districts=True, annotate=True):
@@ -90,7 +103,6 @@ def plot_network(districts=True, annotate=True):
             "nodelabels":labels,
             "edges":lines}
 
-#cart_img = plt.imread("images/chest_minecart_projection.png")
 cart_img = Image.open("images/chest_minecart_projection.png")
 cart_npimg = np.array(cart_img)
 width,height = cart_img.size
@@ -98,7 +110,7 @@ cart_img_large = cart_img.resize((width*r,height*r), resample=Image.Resampling.B
 cart_npimg_large = np.array(cart_img_large)
 def plot_cart(ax, pos, angle, addr):
     # cart image
-    img = OffsetImage(rotate(cart_npimg_large, angle-90), zoom=cartsize*(.05/zi))
+    img = OffsetImage(rotate(cart_npimg_large, angle-90), zoom=.0015 * cartsize * zi)
     box = AnnotationBbox(img, pos, frameon=False)
     # destination address annotation
     label = AnnotationBbox(
@@ -119,7 +131,6 @@ def zoom_animation(filename, focus, backwards=False):
     if isinstance(focus, str):
         node = nodes[focus]
         focus = np.array([node["x"], node["z"]])
-
     def update(frame):
         if not backwards: frame = 1 - frame
         set_zoom(ax, 1-frame, artists, focus=focus)
