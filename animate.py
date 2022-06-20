@@ -183,7 +183,7 @@ def blink_animation(filename, annotate=True):
             marker.set_zorder(100)
         return markers
 
-    frames = np.linspace(0, num_blinks*np.pi, blink_speed * fps * num_blinks)
+    frames = np.linspace(0, num_blinks*np.pi, int(blink_speed * fps * num_blinks))
     anim = FuncAnimation(fig, update, blit=True, frames=frames)
     save_anim(filename, anim)
 
