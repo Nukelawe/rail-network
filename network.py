@@ -139,7 +139,7 @@ class Network:
         ax.set_aspect('equal', adjustable='box')
         return fig, ax
 
-    def plot_edges(self, fig):
+    def plot_edges(self, fig=plt.gcf()):
         ax = fig.gca()
         edges = []
         for edge in self.edges:
@@ -170,7 +170,7 @@ class Network:
                 edges.append(a[0])
         return edges
 
-    def plot_nodes(self, fig, districts=True, annotate=True):
+    def plot_nodes(self, fig=plt.gcf(), districts=True, annotate=True):
         stations = []
         intersections = []
         labels = []
