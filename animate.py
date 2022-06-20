@@ -48,9 +48,10 @@ def zoom_limits(s, focus=None):
     zoom_out = np.array([[0, 0], [192, 108]])
     if focus is None: focus = np.mean(zoom_out, axis=0)
     s = betainc(pin,pout,s) / betainc(pin,pout,1)
-    z = (1-s) / zo + s / zi
-    zoom_in = np.array([[.5,-.5], [.5, .5]]) / zi @ zoom_out + focus
-    return zoom_in * s + zoom_out * (1-s), 1 / z
+    z = zo * (1-s) + zi * s
+    A = zi * np.array([[.5,-.5], [.5, .5]])
+    zoom_in = zi * np.array([[.5,-.5], [.5, .5]]) @ zoom_out + focus
+    return zoom_in * s + zoom_out * (1-s), z
 
 fps = 60 # frames per second
 movement_speed = 3 # number of seconds to move from left to right accross the screen
@@ -67,14 +68,13 @@ def set_zoom(ax, level, artists, focus=None):
     ax.set_xlim(limits[:,0])
     ax.set_ylim(limits[:,1])
     for marker in artists["stations"]:
-        marker.set_markersize(stationsize * z)
+        marker.set_markersize(stationsize / z)
     for marker in artists["intersections"]:
-        marker.set_markersize(intersectionsize * z)
+        marker.set_markersize(intersectionsize / z)
     for marker in artists["stations"] + artists["intersections"]:
-        marker.set_markeredgewidth(linewidth * z)
+        marker.set_markeredgewidth(linewidth / z)
     for line in artists["edges"]:
-        line.set_linewidth(linewidth * z)
-
+        line.set_linewidth(linewidth / z)
     # bezier curve font size interpolation
     z0 = zo; z1 = fontsize_in / fontsize_out; z2 = zi
     f0 = fontsize_out; f1 = fontsize_in; f2 = fontsize_in;
