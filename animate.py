@@ -84,13 +84,8 @@ def set_zoom(ax, level, artists, focus=None):
     t = .5 / a * (-b + np.sqrt(b**2 - 4 * a * c))
     fontsize = (1-t) * ((1-t) * f0 + t * f1) + t * ((1-t) * f1 + t * f2)
     for label in artists["nodelabels"]:
-<<<<<<< HEAD
-        label.set_fontsize(fontsize_out)
-        label.xyann = label_offset / z
-=======
         label.set_fontsize(fontsize)
         label.xyann = label_offset * z
->>>>>>> c7ecd0fa92b7a2bf38332e20a7d81571fe645ce6
     return z
 
 def plot_network(districts=True, annotate=True):
