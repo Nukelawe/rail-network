@@ -48,17 +48,17 @@ lineargs= {
         "linestyle":None
 }
 
-# parse the node label for its district number
-def _get_district(label):
-    addr = label.split(".")
-    if len(addr) == 2 and addr[0].isnumeric():
-        return addr[0]
-    return 0
-
 class Network:
+    def split_address(label):
+        addr = label.split(".")
+        if len(addr) == 2 and addr[0].isnumeric():
+            return addr[0],addr[1]
+        return 0,0
+
     def __init__(self, nodes, edges):
         self.nodes = nodes
         self.edges = edges
+        self.markers = {} # label -> list of markers at that label
         self.districts = {} # district number -> list of node indices
         # numpy array of node coords
         self.points = np.empty(len(self.nodes), dtype=[("x",int), ("z",int)])
@@ -69,10 +69,10 @@ class Network:
             if node["station"]:
                 station_inds.append(i)
             self.points[i] = (node["x"], node["z"])
-            addr = _get_district(label)
-            if addr not in self.districts.keys():
-                self.districts[addr] = []
-            self.districts[addr].append(i)
+            gaddr,_ = Network.split_address(label)
+            if gaddr not in self.districts.keys():
+                self.districts[gaddr] = []
+            self.districts[gaddr].append(i)
 
         self.flatlabels = {} # label -> flattened station address
         station_points = self.points[station_inds]
@@ -136,7 +136,7 @@ class Network:
         else:
             ax.axis("off")
         fig.set_facecolor(bgcolor)
-        ax.set_aspect('equal', adjustable='box')
+        ax.set_aspect("equal", adjustable="box")
         return fig, ax
 
     def plot_edges(self, fig=plt.gcf()):
@@ -184,25 +184,31 @@ class Network:
         disp0 = trans.transform((0,0))
         markersize = (disp1-disp0)[0]
         for label,node in self.nodes.items():
+            self.markers[label] = {}
             if node["station"]:
                 disp = trans.transform((node["x"],node["z"]))
                 data = trans_inv.transform(disp)
+                # draw a line connecting the intersection station to the intersection
                 if node["intersection"]:
                     dataoffset = trans_inv.transform(disp + offset)
                     ax.plot([data[0], dataoffset[0]],
                             [data[1], dataoffset[1]], **lineargs)
                     data = dataoffset
-                a = ax.plot(data[0], data[1], marker="o", **nodeargs)
-                stations.append(a[0])
-                if not districts: label = self.flatlabels[label]
+                a = ax.plot(data[0], data[1], marker="o", **nodeargs)[0]
+                self.markers[label]["station"] = a
+                stations.append(a)
+
+                annotation = label
+                if not districts: annotation = self.flatlabels[label]
                 if annotate:
-                    a = ax.annotate(label, (node["x"], node["z"]), color=linecolor,
+                    a = ax.annotate(annotation, (node["x"], node["z"]), color=linecolor,
                             **labelargs)
                     labels.append(a)
 
             if node["intersection"]:
-                a = ax.plot(node["x"], node["z"], marker="D", **nodeargs)
-                intersections.append(a[0])
+                a = ax.plot(node["x"], node["z"], marker="D", **nodeargs)[0]
+                self.markers[label]["intersection"] = a
+                intersections.append(a)
                 if self.debug and annotate:
                     a = ax.annotate(label, (node["x"], node["z"]),
                             color=debugcolor, **labelargs)
