@@ -248,6 +248,7 @@ def rotate_animation(filename, focus, dirn0, dirn1, addr):
 
     numframes = int(fps * rotation_speed * np.amax(angle1 - angle0) / 180)
     frames = np.linspace(0, 1, numframes)
+    frames = np.concatenate(([0],frames))
     a = FuncAnimation(anim.fig, update, blit=True, frames=frames)
     anim.save(filename, a)
 
@@ -268,7 +269,7 @@ def move_cart(filename, focus, dirn, addr, backwards=False, center=None,
     anim = Animation()
     anim.plot_network()
     anim.set_zoom(1, focus)
-    anim.plot_routing_table()
+    if routing_table: anim.plot_routing_table()
 
     node = nodes[focus]
     p0 = np.array([node["x"], node["z"]])
@@ -289,22 +290,13 @@ def move_cart(filename, focus, dirn, addr, backwards=False, center=None,
     label = anim.artists["destlabel"]
     outline = anim.artists["dest_outline"]
     def update(frame):
-        if frame < .05 or not routing_table:
-            anim.artists["color_table"].set_visible(False)
-            anim.artists["edges_table"].set_visible(False)
-        else:
-            anim.artists["color_table"].set_visible(True)
-            anim.artists["edges_table"].set_visible(True)
         cart.xyann = p1 * frame + p0 * (1-frame)
         label.xyann = cart.xyann
         outline.center = cart.xyann
-        return [cart,label,outline,
-                anim.artists["color_table"],anim.artists["edges_table"]]
-
-    init = lambda:list(itertools.chain(*nw_artists.values()))
+        return [cart,label,outline]
 
     numframes = int(fps * movement_speed * np.amax(np.abs(p0-p1)) / size[0])
-    frames = np.linspace(0, 1, numframes)
+    frames = np.concatenate(([0],np.linspace(0, 1, numframes))) 
     a = FuncAnimation(anim.fig, update, blit=True, frames=frames)
     anim.save(filename, a)
 
@@ -329,6 +321,7 @@ def blink_table(filename, focus, dirn, addr):
             cell.set_facecolor(to_hex(s * blink_color + (1-s) * black))
         return table,
     frames = np.linspace(0, num_blinks*np.pi, int(blink_speed * fps * num_blinks))
+    frames = np.concatenate(([0],frames))
     a = FuncAnimation(anim.fig, update, blit=True, frames=frames)
     anim.save(filename, a)
 
@@ -344,23 +337,26 @@ def blink_cart(filename, focus, dirn, addr, districts=False):
         outline.set_facecolor(to_hex(s * blink_color + (1-s) * black))
         return outline,
     frames = np.linspace(0, num_blinks*np.pi, int(blink_speed * fps * num_blinks))
+    frames = np.concatenate(([0],frames)) # this is a dirty fix where the first frame shows big text in the table
     a = FuncAnimation(anim.fig, update, blit=True, frames=frames)
     anim.save(filename, a)
 
 if __name__ =="__main__":
-    blink_animation("blink_stations.mp4", annotate=False)
-    blink_animation("blink_intersections.mp4", annotate=True)
+    # blink_animation("blink_stations.mp4", annotate=False)
+    # blink_animation("blink_intersections.mp4", annotate=True)
 
     addr = "1.4"
-    add_cart_label("station1.mp4", "1.3", "south", addr)
-    move_cart("station2.mp4", "1.3", "south", addr)
-    move_cart("intersection1.mp4", "1.0i", "north", addr, backwards=True, routing_table=True)
+    # add_cart_label("station1.mp4", "1.3", "south", addr)
+    # move_cart("station2.mp4", "1.3", "south", addr)
+    move_cart("intersection1_routingtable.mp4", "1.0i", "north", addr, backwards=True, routing_table=True)
+    move_cart("intersection1.mp4", "1.0i", "north", addr, backwards=True)
+    move_cart("intersection3_routingtable.mp4", "1.0i", "east", addr, routing_table=True)
     move_cart("intersection3.mp4", "1.0i", "east", addr)
 
-    zoom_animation("zoom1.mp4", "1.3")
-    zoom_animation("zoom2.mp4", "1.3", backwards=True)
-    zoom_animation("zoom3.mp4", "1.0i")
-    zoom_animation("zoom4.mp4", "1.0i", backwards=True)
+    # zoom_animation("zoom1.mp4", "1.3")
+    # zoom_animation("zoom2.mp4", "1.3", backwards=True)
+    # zoom_animation("zoom3.mp4", "1.0i")
+    # zoom_animation("zoom4.mp4", "1.0i", backwards=True)
 
     rotate_animation("rotate1.mp4", "1.0i", "south", "east", addr)
     blink_cart("routing1.mp4", "1.0i", "south", addr)
