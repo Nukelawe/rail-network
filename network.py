@@ -1,6 +1,7 @@
 import numpy as np
 from voronoi_chebyshev import voronoi_chebyshev
 import matplotlib.transforms as transforms
+from matplotlib.offsetbox import AnnotationBbox, TextArea
 import matplotlib.pyplot as plt
 import matplotlib
 import json
@@ -26,7 +27,9 @@ stationsize = 10 # size of stations
 intersectionsize = 10 # size of intersections
 fontsize_out = 20 # label font size in zoomed out scenes
 fontsize_in = 60 # label font size in zoomed in scenes
-label_offset = np.array([6,6])
+label_offset = np.array([21,15])
+dx = np.array([10,0])
+#offset = np.array([-7.5/72.*fig.dpi, -7.5/72.*fig.dpi])
 
 # style arguments for lines
 lineargs= {
@@ -36,7 +39,6 @@ lineargs= {
         "linewidth":line_width
 }; labelargs = {
         "textcoords":"offset points",
-        "xytext":label_offset,
         "fontname":"sans serif",
         "fontweight":"regular",
         "fontsize":fontsize_out
@@ -179,14 +181,18 @@ class Network:
         trans_inv = ax.transData.inverted()
         offset = np.array([-7.5/72.*fig.dpi, -7.5/72.*fig.dpi])
 
-        # marker size
-        disp1 = trans.transform((.5,.5))
-        disp0 = trans.transform((0,0))
-        markersize = (disp1-disp0)[0]
         for label,node in self.nodes.items():
-            self.markers[label] = {}
+            markerdict = {}
+            pos = np.array([node["x"], node["z"]])
+            textprops = {"color":linecolor, "fontname":"sans",
+                "fontweight":"regular", "fontsize":fontsize_out,
+                "horizontalalignment":"center",
+                "verticalalignment":"baseline"}
+            annprops = {"frameon":False, "zorder":101,
+                "boxcoords":"offset points",
+                "fontsize":fontsize_in, "pad":0, "box_alignment":(.5,.5)}
             if node["station"]:
-                disp = trans.transform((node["x"],node["z"]))
+                disp = trans.transform(pos)
                 data = trans_inv.transform(disp)
                 # draw a line connecting the intersection station to the intersection
                 if node["intersection"]:
@@ -195,24 +201,54 @@ class Network:
                             [data[1], dataoffset[1]], **lineargs)
                     data = dataoffset
                 a = ax.plot(data[0], data[1], marker="o", **nodeargs)[0]
-                self.markers[label]["station"] = a
+                markerdict["station"] = a
                 stations.append(a)
 
-                annotation = label
-                if not districts: annotation = self.flatlabels[label]
                 if annotate:
-                    a = ax.annotate(annotation, (node["x"], node["z"]), color=linecolor,
-                            **labelargs)
-                    labels.append(a)
+                    if districts:
+                        gaddr,laddr = Network.split_address(label)
+                        ltext = TextArea(laddr, textprops=textprops)
+                        dtext = TextArea(".", textprops=textprops)
+                        gtext = TextArea(gaddr, textprops=textprops)
+                        a = AnnotationBbox(gtext, pos,
+                                xybox=label_offset-dx,
+                                **annprops)
+                        markerdict["gaddr"] = a
+                        labels.append(a); ax.add_artist(a)
+                        a = AnnotationBbox(dtext, pos,
+                                xybox=label_offset,
+                                **annprops)
+                        labels.append(a); ax.add_artist(a)
+                        a = AnnotationBbox(ltext, pos,
+                                xybox=label_offset+dx,
+                                **annprops)
+                        markerdict["laddr"] = a
+                        labels.append(a); ax.add_artist(a)
+                    else:
+                        text = TextArea(self.flatlabels[label], textprops=textprops)
+                        markerdict["laddr"] = text
+                        a = AnnotationBbox(text, pos,
+                                xybox=label_offset-dx, **annprops)
+                        labels.append(a); ax.add_artist(a)
 
             if node["intersection"]:
-                a = ax.plot(node["x"], node["z"], marker="D", **nodeargs)[0]
-                self.markers[label]["intersection"] = a
+                a = ax.plot(pos[0], pos[1], marker="D", **nodeargs)[0]
+                markerdict["intersection"] = a
                 intersections.append(a)
-                if self.debug and annotate:
-                    a = ax.annotate(label, (node["x"], node["z"]),
-                            color=debugcolor, **labelargs)
-                    labels.append(a)
+                # annotate intersections
+                textprops = {"color":debugcolor, "fontname":"sans",
+                    "fontweight":"regular", "fontsize":fontsize_out,
+                    "horizontalalignment":"center",
+                    "verticalalignment":"baseline"}
+                if self.debug and annotate and not node["station"]:
+                    text = TextArea(label, textprops=textprops)
+                    a = AnnotationBbox(text, pos,
+                            xybox=label_offset,
+                            **annprops)
+                    labels.append(a); ax.add_artist(a)
+
+            self.markers[label] = markerdict
+
         if districts: self._plot_districts(ax)
         return stations, intersections, labels
 

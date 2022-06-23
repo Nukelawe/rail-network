@@ -31,7 +31,6 @@ fontsize_in = 60 # label font size in zoomed in scenes
 stationsize = 10 # size of stations
 intersectionsize = 10 # size of intersections
 linewidth = stationsize / 6 # width of lines
-label_offset = np.array([6,6])
 cartsize = stationsize
 zi = 14 # zoomed in level
 zo = 1 # zoomed out level
@@ -71,6 +70,7 @@ class Animation():
         self.districts = districts
         self.annotate = annotate
         self.plot_network()
+        self.set_zoom(0, None)
 
     def plot_network(self):
         network.plot(fig=self.fig)
@@ -80,8 +80,6 @@ class Animation():
         self.artists["stations"] = s
         self.artists["intersections"] = i
         self.artists["nodelabels"] = l
-        for label in l:
-            label.set_fontsize(fontsize_out)
 
     def plot_cart(self,
             dirn, # direction the cart is facing
@@ -103,9 +101,8 @@ class Animation():
                 TextArea(addr, multilinebaseline=True,
                     textprops={"color":"white", "fontname":"sans",
                         "fontweight":"regular", "fontsize":fontsize_in,
-                        "horizontalalignment":"center", "verticalalignment":"baseline",
-                        "fontstretch":1000, "usetex":True}),
-                pos, frameon=False, zorder=101,
+                        "horizontalalignment":"center", "verticalalignment":"baseline"}),
+                pos, frameon=False, zorder=101, fontsize=fontsize_in,
                 pad=0, box_alignment=(.50,.58))
 
         # outline for the destination address
@@ -116,10 +113,12 @@ class Animation():
             self.ax.add_artist(self.artists[artist])
 
     def set_zoom(self, level, focus):
+        zoom_out = np.array([[0, 0], [192, 108]])
         if isinstance(focus, str):
             node = nodes[focus]
             focus = np.array([node["x"], node["z"]])
-        zoom_out = np.array([[0, 0], [192, 108]])
+        elif focus is None:
+            focus = np.mean(zoom_out, axis=0)
         s = betainc(pin,pout,level) / betainc(pin,pout,1)
         z = 1 / ((1-s) / zo + s / zi)
         zoom_in = np.array([[.5,-.5], [.5, .5]]) / zi @ zoom_out + focus
@@ -143,9 +142,12 @@ class Animation():
         c = z0 - z
         t = .5 / a * (-b + np.sqrt(b**2 - 4 * a * c))
         fontsize = (1-t) * ((1-t) * f0 + t * f1) + t * ((1-t) * f1 + t * f2)
+        ms = self.artists["stations"][0].get_markersize()
         for label in self.artists["nodelabels"]:
-            label.set_fontsize(fontsize)
-            label.xyann = label_offset * z
+            label.get_children()[0]._text.set_fontsize(fontsize)
+            radius = self.artists["stations"][0].get_markersize() / 2 + .5 * linewidth * z
+            offset = (radius + linewidth * z + .5 * fontsize) / np.sqrt(2)
+            label.xyann = [1.3*offset, offset]
         return z
 
     def plot_routing_table(self, addr):
@@ -193,13 +195,6 @@ class Animation():
         self.artists["edges_table"] = edges_table
         self.artists["color_table"] = color_table
 
-    def save(self,
-            filename, # name of the file to save the animation
-            anim # animation object
-        ):
-        print("Saving animation to file " + filename)
-        anim.save(filename, fps=fps, dpi=100)
-
 def zoom_animation(focus, backwards=False):
     anim = Animation()
     artists = [anim.artists["stations"], anim.artists["intersections"],
@@ -224,6 +219,20 @@ def blink_markers(markertype, **kwargs):
             marker.set_markerfacecolor(color)
             marker.set_zorder(100)
         return markers
+    frames = np.linspace(0, num_blinks*np.pi, int(blink_speed * fps * num_blinks))
+    return FuncAnimation(anim.fig, update, blit=True, frames=frames)
+
+def blink_labels(labeltype, **kwargs):
+    anim = Animation(districts=True, **kwargs)
+    def update(frame):
+        s = np.sin(frame)**2
+        color = to_hex(s * blink_color + (1-s) * black)
+        for label,markerdict in network.markers.items():
+            if labeltype not in markerdict: continue
+            address = markerdict[labeltype].get_children()[0].get_children()[0]
+            address.set_fontsize(fontsize_out * (1 + s))
+            markerdict[labeltype].set_zorder(100)
+        return anim.artists["nodelabels"]
     frames = np.linspace(0, num_blinks*np.pi, int(blink_speed * fps * num_blinks))
     return FuncAnimation(anim.fig, update, blit=True, frames=frames)
 
@@ -391,6 +400,10 @@ animation_instructions = {
         lambda: blink_cart("1.4", "east", "1.4"),
     "routing4":
         lambda: blink_table("1.4", "east", "1.4"),
+    "blink_local":
+        lambda: blink_labels("laddr"),
+    "blink_global":
+        lambda: blink_labels("gaddr"),
 }
 
 if __name__ == "__main__":
