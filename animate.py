@@ -39,9 +39,10 @@ black = np.array([0.,0.,0.])
 r = 10 # image rescale factor
 pin = 2.0 # pin is the ease in factor
 pout = 2.0 # pout is the ease out factor
-num_blinks = 3 # number of times stations or intersections blink
+num_blinks = 1 # number of times stations or intersections blink
 blink_speed = 0.8 # time to blink once in seconds
 max_table_size = 8 # number of routing table rows to display
+dx = .7 # the horizontal offset between the parts of an address and the dot separator
 
 fps = 60 # frames per second
 movement_speed = 3 # number of seconds to move from left to right accross the screen
@@ -75,11 +76,19 @@ class Animation():
     def plot_network(self):
         network.plot(fig=self.fig)
         self.artists["lines"] = network.plot_edges(self.fig)
-        s,i,l = network.plot_nodes(fig=self.fig, districts=self.districts,
-                annotate=self.annotate)
-        self.artists["stations"] = s
-        self.artists["intersections"] = i
-        self.artists["nodelabels"] = l
+        artists,self.artist_indices = network.plot_nodes(fig=self.fig,
+                districts=self.districts, annotate=self.annotate)
+        for t in ["stations", "intersections", "global_labels",
+                "local_labels", "dot_labels", "flat_labels"]:
+            self.artists[t] = [artists[i] for i in self.artist_indices[t].values()]
+
+        if self.districts:
+            hidden = self.artists["flat_labels"]
+        else:
+            hidden = self.artists["global_labels"] + self.artists["local_labels"] + \
+                    self.artists["dot_labels"]
+        for artist in hidden:
+            artist.set_visible(False)
 
     def plot_cart(self,
             dirn, # direction the cart is facing
@@ -143,11 +152,17 @@ class Animation():
         t = .5 / a * (-b + np.sqrt(b**2 - 4 * a * c))
         fontsize = (1-t) * ((1-t) * f0 + t * f1) + t * ((1-t) * f1 + t * f2)
         ms = self.artists["stations"][0].get_markersize()
-        for label in self.artists["nodelabels"]:
+        radius = self.artists["stations"][0].get_markersize() / 2 + .5 * linewidth * z
+        offset = (radius + linewidth * z + .5 * fontsize) / np.sqrt(2)
+        for label in self.artists["global_labels"] + self.artists["local_labels"] + \
+                self.artists["dot_labels"] + self.artists["flat_labels"]:
             label.get_children()[0]._text.set_fontsize(fontsize)
-            radius = self.artists["stations"][0].get_markersize() / 2 + .5 * linewidth * z
-            offset = (radius + linewidth * z + .5 * fontsize) / np.sqrt(2)
-            label.xyann = [1.3*offset, offset]
+        for label in self.artists["global_labels"]:
+            label.xyann = [(1.3-dx) * offset, offset]
+        for label in self.artists["local_labels"]:
+            label.xyann = [(1.3+dx) * offset, offset]
+        for label in self.artists["dot_labels"] + self.artists["flat_labels"]:
+            label.xyann = [1.3 * offset, offset]
         return z
 
     def plot_routing_table(self, addr):
@@ -197,9 +212,10 @@ class Animation():
 
 def zoom_animation(focus, backwards=False):
     anim = Animation()
-    artists = [anim.artists["stations"], anim.artists["intersections"],
-            anim.artists["lines"], anim.artists["nodelabels"]]
-    artists = list(itertools.chain(*artists))
+    artists = anim.artists["stations"] + anim.artists["intersections"] + \
+            anim.artists["lines"] + anim.artists["dot_labels"] + \
+            anim.artists["local_labels"] + anim.artists["global_labels"] + \
+            anim.artists["flat_labels"]
     def update(frame):
         if not backwards: frame = 1 - frame
         anim.set_zoom(1-frame, focus)
@@ -222,17 +238,16 @@ def blink_markers(markertype, **kwargs):
     frames = np.linspace(0, num_blinks*np.pi, int(blink_speed * fps * num_blinks))
     return FuncAnimation(anim.fig, update, blit=True, frames=frames)
 
-def blink_labels(labeltype, **kwargs):
+def blink_labels(label_type, **kwargs):
     anim = Animation(districts=True, **kwargs)
     def update(frame):
         s = np.sin(frame)**2
         color = to_hex(s * blink_color + (1-s) * black)
-        for label,markerdict in network.markers.items():
-            if labeltype not in markerdict: continue
-            address = markerdict[labeltype].get_children()[0].get_children()[0]
-            address.set_fontsize(fontsize_out * (1 + s))
-            markerdict[labeltype].set_zorder(100)
-        return anim.artists["nodelabels"]
+        for artist in anim.artists[label_type]:
+            text = artist.get_children()[0].get_children()[0]
+            text.set_fontsize(fontsize_out * (1 + s))
+            artist.set_zorder(100)
+        return anim.artists["global_labels"] + anim.artists["local_labels"]
     frames = np.linspace(0, num_blinks*np.pi, int(blink_speed * fps * num_blinks))
     return FuncAnimation(anim.fig, update, blit=True, frames=frames)
 
@@ -261,11 +276,21 @@ def rotate_animation(focus, dirn0, dirn1, addr):
     return FuncAnimation(anim.fig, update, blit=True, frames=frames)
 
 def add_cart_label(focus, dirn, addr):
-    anim = Animation()
+    anim = Animation(districts=True)
     anim.set_zoom(1, focus)
     anim.plot_cart(dirn, addr)
     anim.artists["destlabel"].set_visible(False)
     anim.artists["dest_outline"].set_visible(False)
+    return FuncAnimation(anim.fig, lambda frame: [], blit=True, frames=[0])
+
+def districts_but_flattened():
+    anim = Animation(districts=True)
+    anim.set_zoom(0, None)
+    for artist in anim.artists["global_labels"] + anim.artists["local_labels"] + \
+            anim.artists["dot_labels"]:
+        artist.set_visible(False)
+    for artist in anim.artists["flat_labels"]:
+        artist.set_visible(True)
     return FuncAnimation(anim.fig, lambda frame: [], blit=True, frames=[0])
 
 def move_cart(
@@ -401,9 +426,11 @@ animation_instructions = {
     "routing4":
         lambda: blink_table("1.4", "east", "1.4"),
     "blink_local":
-        lambda: blink_labels("laddr"),
+        lambda: blink_labels("local_labels"),
     "blink_global":
-        lambda: blink_labels("gaddr"),
+        lambda: blink_labels("global_labels"),
+    "districts1":
+        lambda: districts_but_flattened(),
 }
 
 if __name__ == "__main__":

@@ -60,7 +60,6 @@ class Network:
     def __init__(self, nodes, edges):
         self.nodes = nodes
         self.edges = edges
-        self.markers = {} # label -> list of markers at that label
         self.districts = {} # district number -> list of node indices
         # numpy array of node coords
         self.points = np.empty(len(self.nodes), dtype=[("x",int), ("z",int)])
@@ -173,16 +172,21 @@ class Network:
         return edges
 
     def plot_nodes(self, fig=plt.gcf(), districts=True, annotate=True):
-        stations = []
-        intersections = []
-        labels = []
+        artists = []
         ax = fig.gca()
         trans = ax.transData
         trans_inv = ax.transData.inverted()
         offset = np.array([-7.5/72.*fig.dpi, -7.5/72.*fig.dpi])
 
+        artist_indices = {
+            "stations": {},
+            "intersections": {},
+            "global_labels": {},
+            "local_labels": {},
+            "dot_labels": {},
+            "flat_labels": {},
+        }
         for label,node in self.nodes.items():
-            markerdict = {}
             pos = np.array([node["x"], node["z"]])
             textprops = {"color":linecolor, "fontname":"sans",
                 "fontweight":"regular", "fontsize":fontsize_out,
@@ -201,40 +205,42 @@ class Network:
                             [data[1], dataoffset[1]], **lineargs)
                     data = dataoffset
                 a = ax.plot(data[0], data[1], marker="o", **nodeargs)[0]
-                markerdict["station"] = a
-                stations.append(a)
+                artists.append(a)
+                artist_indices["stations"][label] = len(artists) - 1
 
                 if annotate:
-                    if districts:
-                        gaddr,laddr = Network.split_address(label)
-                        ltext = TextArea(laddr, textprops=textprops)
-                        dtext = TextArea(".", textprops=textprops)
-                        gtext = TextArea(gaddr, textprops=textprops)
-                        a = AnnotationBbox(gtext, pos,
-                                xybox=label_offset-dx,
-                                **annprops)
-                        markerdict["gaddr"] = a
-                        labels.append(a); ax.add_artist(a)
-                        a = AnnotationBbox(dtext, pos,
-                                xybox=label_offset,
-                                **annprops)
-                        labels.append(a); ax.add_artist(a)
-                        a = AnnotationBbox(ltext, pos,
-                                xybox=label_offset+dx,
-                                **annprops)
-                        markerdict["laddr"] = a
-                        labels.append(a); ax.add_artist(a)
-                    else:
-                        text = TextArea(self.flatlabels[label], textprops=textprops)
-                        markerdict["laddr"] = text
-                        a = AnnotationBbox(text, pos,
-                                xybox=label_offset-dx, **annprops)
-                        labels.append(a); ax.add_artist(a)
+                    # decomposed address
+                    gaddr,laddr = Network.split_address(label)
+                    ltext = TextArea(laddr, textprops=textprops)
+                    dtext = TextArea(".", textprops=textprops)
+                    gtext = TextArea(gaddr, textprops=textprops)
+                    a = AnnotationBbox(gtext, pos,
+                            xybox=label_offset-dx,
+                            **annprops)
+                    artists.append(a); ax.add_artist(a)
+                    artist_indices["global_labels"][label] = len(artists) - 1
+                    a = AnnotationBbox(dtext, pos,
+                            xybox=label_offset,
+                            **annprops)
+                    artists.append(a); ax.add_artist(a)
+                    artist_indices["dot_labels"][label] = len(artists) - 1
+                    a = AnnotationBbox(ltext, pos,
+                            xybox=label_offset+dx,
+                            **annprops)
+                    artists.append(a); ax.add_artist(a)
+                    artist_indices["local_labels"][label] = len(artists) - 1
+
+                    # flattened address
+                    text = TextArea(self.flatlabels[label], textprops=textprops)
+                    a = AnnotationBbox(text, pos,
+                            xybox=label_offset-dx, **annprops)
+                    artists.append(a); ax.add_artist(a)
+                    artist_indices["flat_labels"][label] = len(artists) - 1
 
             if node["intersection"]:
                 a = ax.plot(pos[0], pos[1], marker="D", **nodeargs)[0]
-                markerdict["intersection"] = a
-                intersections.append(a)
+                artists.append(a)
+                artist_indices["intersections"][label] = len(artists) - 1
                 # annotate intersections
                 textprops = {"color":debugcolor, "fontname":"sans",
                     "fontweight":"regular", "fontsize":fontsize_out,
@@ -245,12 +251,10 @@ class Network:
                     a = AnnotationBbox(text, pos,
                             xybox=label_offset,
                             **annprops)
-                    labels.append(a); ax.add_artist(a)
-
-            self.markers[label] = markerdict
+                    ax.add_artist(a)
 
         if districts: self._plot_districts(ax)
-        return stations, intersections, labels
+        return artists, artist_indices
 
     def _plot_districts(self, ax):
         # color the map
